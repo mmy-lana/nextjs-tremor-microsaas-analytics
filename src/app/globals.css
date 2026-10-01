@@ -6,6 +6,36 @@
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+/*
+ * Chart palette.
+ *
+ * These live in CSS rather than in JS so the Recharts primitives can reference
+ * one variable per series and pick up the dark palette automatically, without a
+ * matchMedia call and without duplicating hex values across components.
+ */
+:root {
+  --chart-gross: #0284c7;
+  --chart-new: #059669;
+  --chart-expansion: #4f46e5;
+  --chart-contraction: #d97706;
+  --chart-churn: #e11d48;
+  --chart-neutral: #71717a;
+  --chart-grid: #e4e4e7;
+  --chart-axis-text: #52525b;
+}
+
+.dark {
+  --chart-gross: #38bdf8;
+  --chart-new: #34d399;
+  --chart-expansion: #818cf8;
+  --chart-contraction: #fbbf24;
+  --chart-churn: #fb7185;
+  --chart-neutral: #a1a1aa;
+  --chart-grid: #3f3f46;
+  --chart-axis-text: #a1a1aa;
+}
+
+/* Touch devices cannot hover, so the mounted tooltip would never dismiss. */
 @media (hover: none) {
   .recharts-tooltip-wrapper {
     display: none !important;
@@ -16,4 +46,10 @@
   html {
     scroll-behavior: smooth;
   }
+}
+
+/* Recharts renders an accessibility layer on top of the plot. */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
 }
