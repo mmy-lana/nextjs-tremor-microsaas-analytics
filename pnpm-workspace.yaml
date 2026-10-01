@@ -1,2 +1,13 @@
+# pnpm >= 11 reads every non-auth setting from this file; package.json's "pnpm"
+# field is ignored.
+engineStrict: true
+strictPeerDependencies: false
+
+# Pin `react-is` to the exact React version so the runtime copy (Recharts
+# declares it as an optional peer) and the copy pulled in transitively through
+# prop-types resolve to a single build.
+overrides:
+  react-is: 19.3.0
+
 allowBuilds:
   unrs-resolver: true
