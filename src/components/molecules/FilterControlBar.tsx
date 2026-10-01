@@ -58,14 +58,12 @@ const selectClass =
 
 const labelClass = 'block text-sm font-medium text-zinc-700 dark:text-zinc-200';
 
-function FilterFields({
+function MobileFilterFields({
   filters,
   onChange,
-  idPrefix,
 }: {
   filters: DashboardFilterState;
   onChange: (patch: Partial<DashboardFilterState>) => void;
-  idPrefix: string;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -82,11 +80,11 @@ function FilterFields({
       </div>
 
       <div className="min-w-0">
-        <label className={labelClass} htmlFor={`${idPrefix}-tier`}>
+        <label className={labelClass} htmlFor="drawer-tier">
           Tier
         </label>
         <select
-          id={`${idPrefix}-tier`}
+          id="drawer-tier"
           value={filters.tier}
           onChange={(event) =>
             onChange({ tier: event.target.value as DashboardFilterState['tier'] })
@@ -103,11 +101,11 @@ function FilterFields({
       </div>
 
       <div className="min-w-0">
-        <label className={labelClass} htmlFor={`${idPrefix}-channel`}>
+        <label className={labelClass} htmlFor="drawer-channel">
           Channel
         </label>
         <select
-          id={`${idPrefix}-channel`}
+          id="drawer-channel"
           value={filters.channel}
           onChange={(event) =>
             onChange({ channel: event.target.value as DashboardFilterState['channel'] })
@@ -124,11 +122,11 @@ function FilterFields({
       </div>
 
       <div className="min-w-0">
-        <label className={labelClass} htmlFor={`${idPrefix}-search`}>
+        <label className={labelClass} htmlFor="drawer-search">
           Search
         </label>
         <input
-          id={`${idPrefix}-search`}
+          id="drawer-search"
           type="search"
           value={filters.searchQuery}
           placeholder="Organization or email"
@@ -141,12 +139,12 @@ function FilterFields({
       </div>
 
       <div className="min-w-0">
-        <label className={labelClass} htmlFor={`${idPrefix}-sort`}>
+        <label className={labelClass} htmlFor="drawer-sort">
           Sort by
         </label>
         <div className="mt-1 flex min-w-0 items-center gap-2">
           <select
-            id={`${idPrefix}-sort`}
+            id="drawer-sort"
             value={filters.sortField}
             onChange={(event) =>
               onChange({
@@ -204,15 +202,122 @@ export function FilterControlBar({ filters, onChange, onReset }: FilterControlBa
 
   return (
     <div
-      // The header is `sticky top-0` with a safe-area top padding, so on a
-      // notched device it is taller than 4rem. A hardcoded offset left the
-      // filter bar tucked underneath it and the first row unreachable.
       className="sticky top-[calc(4rem+env(safe-area-inset-top,0px))] z-20 -mx-3 mb-4 border-b border-zinc-200 bg-white/95 px-3 py-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95 sm:-mx-4 sm:px-4"
     >
-      <div className="hidden min-w-0 items-end gap-3 md:flex">
-        <div className="min-w-0 flex-1">
-          <FilterFields filters={filters} onChange={onChange} idPrefix="desktop" />
+      <div className="hidden min-w-0 flex-wrap items-end gap-3 md:flex">
+        <div className="w-56 shrink-0">
+          <span className={labelClass}>Date range</span>
+          <SegmentedControl
+            options={DATE_OPTIONS}
+            value={filters.dateRange}
+            onChange={(value) => onChange({ dateRange: value })}
+            ariaLabel="Date range"
+            alwaysShort
+            className="mt-1 w-full"
+          />
         </div>
+
+        <div className="w-36 shrink-0">
+          <label className={labelClass} htmlFor="desktop-tier">
+            Tier
+          </label>
+          <select
+            id="desktop-tier"
+            value={filters.tier}
+            onChange={(event) =>
+              onChange({ tier: event.target.value as DashboardFilterState['tier'] })
+            }
+            className={selectClass}
+          >
+            <option value="all">All tiers</option>
+            {(Object.keys(TIER_LABEL) as SubscriptionTier[]).map((tier) => (
+              <option key={tier} value={tier}>
+                {TIER_LABEL[tier]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="w-40 shrink-0">
+          <label className={labelClass} htmlFor="desktop-channel">
+            Channel
+          </label>
+          <select
+            id="desktop-channel"
+            value={filters.channel}
+            onChange={(event) =>
+              onChange({ channel: event.target.value as DashboardFilterState['channel'] })
+            }
+            className={selectClass}
+          >
+            <option value="all">All channels</option>
+            {(Object.keys(CHANNEL_LABEL) as AcquisitionChannel[]).map((channel) => (
+              <option key={channel} value={channel}>
+                {CHANNEL_LABEL[channel]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="min-w-44 flex-1">
+          <label className={labelClass} htmlFor="desktop-search">
+            Search
+          </label>
+          <input
+            id="desktop-search"
+            type="search"
+            value={filters.searchQuery}
+            placeholder="Organization or email"
+            onChange={(event) => onChange({ searchQuery: event.target.value })}
+            className={selectClass}
+          />
+        </div>
+
+        <div className="w-44 shrink-0">
+          <label className={labelClass} htmlFor="desktop-sort">
+            Sort by
+          </label>
+          <div className="mt-1 flex min-w-0 items-center gap-1.5">
+            <select
+              id="desktop-sort"
+              value={filters.sortField}
+              onChange={(event) =>
+                onChange({
+                  sortField: event.target.value as DashboardFilterState['sortField'],
+                })
+              }
+              className={cn(selectClass, 'mt-0 flex-1')}
+            >
+              {(Object.keys(SORT_LABEL) as DashboardFilterState['sortField'][]).map((field) => (
+                <option key={field} value={field}>
+                  {SORT_LABEL[field]}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() =>
+                onChange({
+                  sortDirection: filters.sortDirection === 'asc' ? 'desc' : 'asc',
+                })
+              }
+              aria-label={`Sort ${filters.sortDirection === 'asc' ? 'descending' : 'ascending'}`}
+              data-testid="sort-direction"
+              className={cn(
+                'inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-300',
+                'text-zinc-700 hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500',
+                'dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800',
+              )}
+            >
+              {filters.sortDirection === 'asc' ? (
+                <ArrowUp aria-hidden="true" className="h-4 w-4" />
+              ) : (
+                <ArrowDown aria-hidden="true" className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+
         <button
           type="button"
           onClick={onReset}
@@ -304,10 +409,9 @@ export function FilterControlBar({ filters, onChange, onReset }: FilterControlBa
           </div>
         }
       >
-        <FilterFields
+        <MobileFilterFields
           filters={draft}
           onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
-          idPrefix="drawer"
         />
       </SlideOverDrawer>
     </div>

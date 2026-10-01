@@ -144,8 +144,8 @@ export function AppHeader({
   };
 
   return (
-    <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
-      <div className="flex items-center gap-2 px-3 pt-[env(safe-area-inset-top)] sm:px-4">
+    <header className="sticky top-0 z-30 flex h-[calc(4rem+env(safe-area-inset-top,0px))] flex-col justify-end border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
+      <div className="flex h-16 items-center gap-2 px-3 sm:px-4">
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
