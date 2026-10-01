@@ -13,6 +13,8 @@ import {
   formatPercent,
 } from '@/lib/utils';
 
+export { CHANNEL_LABEL, TIER_LABEL } from '@/lib/utils';
+
 /**
  * Colour, label and axis helpers shared by the chart primitives.
  *
@@ -64,26 +66,11 @@ export const CHART_TONE_BORDER: Readonly<Record<ChartTone, string>> = {
 /*                                   Labels                                  */
 /* -------------------------------------------------------------------------- */
 
-export const TIER_LABEL: Readonly<Record<SubscriptionTier, string>> = {
-  starter: 'Starter',
-  pro: 'Pro',
-  scale: 'Scale',
-  enterprise: 'Enterprise',
-};
-
 export const TIER_TONE: Readonly<Record<SubscriptionTier, ChartTone>> = {
   starter: 'neutral',
   pro: 'new',
   scale: 'expansion',
   enterprise: 'gross',
-};
-
-export const CHANNEL_LABEL: Readonly<Record<AcquisitionChannel, string>> = {
-  organic_search: 'Organic search',
-  product_hunt: 'Product Hunt',
-  x_social: 'X / social',
-  direct: 'Direct',
-  referral: 'Referral',
 };
 
 export const CHANNEL_TONE: Readonly<Record<AcquisitionChannel, ChartTone>> = {

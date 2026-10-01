@@ -1,6 +1,8 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+import type { AcquisitionChannel, SubscriptionTier } from '@/types/analytics';
+
 /**
  * Deterministic formatting and UTC date helpers.
  *
@@ -17,6 +19,26 @@ export function cn(...inputs: ClassValue[]): string {
 }
 
 export const EM_DASH = '\u2014';
+
+/*
+ * Enum display names live here rather than in the chart module: the CSV exporter
+ * needs them too, and `csv.ts` may not reach sideways into `chartUtils`.
+ * `chartUtils` re-exports them so the UI has one import site.
+ */
+export const TIER_LABEL: Readonly<Record<SubscriptionTier, string>> = {
+  starter: 'Starter',
+  pro: 'Pro',
+  scale: 'Scale',
+  enterprise: 'Enterprise',
+};
+
+export const CHANNEL_LABEL: Readonly<Record<AcquisitionChannel, string>> = {
+  organic_search: 'Organic search',
+  product_hunt: 'Product Hunt',
+  x_social: 'X / social',
+  direct: 'Direct',
+  referral: 'Referral',
+};
 
 export const MS_PER_DAY = 86_400_000;
 

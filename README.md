@@ -27,6 +27,47 @@ pnpm exec playwright install chromium
 - Event-sourced ledger invariant validation.
 - Responsive design tailored for mobile-first viewports (360px+) to desktop.
 
+### Import chain
+Dependencies only ever flow one way, so no module can reach for state that does
+not exist yet:
+
+```
+types → utils / validators / chartUtils → seed → mutations → storage
+      → calculations / csv → hooks → components
+```
+
+`storage.ts` is the only module allowed to touch `window` or `localStorage`.
+`calculations.ts` and `csv.ts` take `now` as a parameter and never read the
+clock, so a metric is reproducible in a test and identical on both sides of a
+hydration boundary.
+
+### Data model
+Customer MRR is never trusted as stored: it is reconstructed from the sum of
+that customer's event deltas. `assertLedgerInvariant` checks the two agree, and
+it runs in the seed generator, at the end of every reducer, and on every read
+back out of `localStorage`.
+
+Mutations carry `expectedVersion`. Two tabs editing the same row cannot silently
+overwrite each other, because the second write is rejected and the tab reloads
+the newer snapshot before asking the user to retry.
+
+### Verification
+| Gate | Command | Result |
+| --- | --- | --- |
+| Types | `pnpm typecheck` | clean, `strict` + `noUncheckedIndexedAccess` |
+| Lint | `pnpm lint` | zero errors, zero warnings |
+| Units | `pnpm test` | 118 tests |
+| Build | `pnpm build` | 2 static routes |
+| Browser | `pnpm e2e` | 30 tests, headless Chromium |
+
+The browser suite asserts the layout contract rather than taking screenshots:
+no horizontal overflow, no hydration warnings, a 44×44 minimum on every visible
+button and tab, and a chart tap reaching the inspector — each across 360, 390,
+430, 768, 1024 and 1280px. It also exercises the flows a user actually performs:
+filtering, sorting, paging, adding a customer, rejecting a duplicate email,
+cancelling behind a confirmation, resetting the dataset, exporting both CSVs and
+a theme choice surviving a reload.
+
 ## Resolved dependency versions
 
 Every dependency is pinned to an exact version. The stack is resolved from the

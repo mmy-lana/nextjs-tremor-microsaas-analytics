@@ -3,12 +3,10 @@ import type {
   DashboardFilterState,
   DashboardStateSnapshot,
   DerivedDailyMetric,
-  SubscriptionStatus,
   SubscriptionTier,
 } from '@/types/analytics';
-import { CHANNEL_LABEL, TIER_LABEL } from '@/lib/chartUtils';
 import { filterCustomerIds, matchesSearchQuery } from '@/lib/calculations';
-import { formatCurrencyFromCents, formatDateTimeUtc, toDateKey } from '@/lib/utils';
+import { CHANNEL_LABEL, TIER_LABEL, toDateKey } from '@/lib/utils';
 
 /**
  * RFC 4180 CSV export with a spreadsheet formula-injection guard.
@@ -186,18 +184,9 @@ export function dailyMrrFilename(effectiveAsOfMs: number): string {
 /*                              Presentation helpers                          */
 /* -------------------------------------------------------------------------- */
 
-/** Human-readable summary used by the live region after an export. */
+/** Announced in the live region after a successful download. */
 export function describeExport(kind: 'customers' | 'daily', rowCount: number): string {
   const noun = kind === 'customers' ? 'customer' : 'daily MRR';
   const plural = rowCount === 1 ? noun : `${noun} rows`;
   return `Exported ${rowCount} ${plural}.`;
 }
-
-/** Currency used by the ledger preview, re-exported for convenience. */
-export const formatCsvCurrency = formatCurrencyFromCents;
-
-/** Timestamp used by the activity feed preview. */
-export const formatCsvTimestamp = formatDateTimeUtc;
-
-/** Status union, exported so callers can exhaustively type a formatter. */
-export type CsvCustomerStatus = SubscriptionStatus;

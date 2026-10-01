@@ -15,8 +15,8 @@ import { cn } from '@/lib/utils';
  */
 
 export interface SparkPoint {
-  /** Bucket label, used only for the accessible summary. */
-  label: string;
+  /** UTC `YYYY-MM-DD` bucket key. */
+  date: string;
   value: number;
 }
 
