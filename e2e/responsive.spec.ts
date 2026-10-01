@@ -103,6 +103,28 @@ test.describe('responsive layout', () => {
   }
 });
 
+test.describe('security headers', () => {
+  test('serves the hardened response headers', async ({ page }) => {
+    const response = await page.goto('/');
+    expect(response).not.toBeNull();
+    const headers = response?.headers() ?? {};
+
+    expect(headers['x-frame-options']).toBe('DENY');
+    expect(headers['x-content-type-options']).toBe('nosniff');
+    expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    expect(headers['permissions-policy']).toContain('camera=()');
+    expect(headers['content-security-policy']).toContain("frame-ancestors 'none'");
+  });
+
+  test('still boots and hydrates with the CSP in place', async ({ page }) => {
+    const messages = collectConsole(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/');
+    await waitForDashboard(page);
+    expect(messages.filter((m) => /error|refused|hydrat/i.test(m))).toEqual([]);
+  });
+});
+
 test.describe('interaction', () => {
   test('tapping a chart pins a bucket in the inspector at 390px', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });

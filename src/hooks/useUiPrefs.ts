@@ -120,26 +120,43 @@ function publish(filters: DashboardFilterState): void {
   }
 }
 
+/**
+ * Reads persisted filters exactly once, outside the render pass.
+ *
+ * `subscribe` is invoked by React when the store is mounted, which is a commit
+ * and not a render, so this is the only place where mutating the module cache is
+ * safe. Doing it inside `getSnapshot` meant the first render of every consumer
+ * mutated module state, which is an impure read: React may call it for a render
+ * it then discards, and the module value would have advanced anyway.
+ */
+function hydrateOnce(): void {
+  if (hydratedFromStorage) {
+    return;
+  }
+  hydratedFromStorage = true;
+  const persisted = readPersistedFilters();
+  if (
+    persisted.dateRange !== currentFilters.dateRange ||
+    persisted.tier !== currentFilters.tier ||
+    persisted.channel !== currentFilters.channel ||
+    persisted.searchQuery !== currentFilters.searchQuery ||
+    persisted.sortField !== currentFilters.sortField ||
+    persisted.sortDirection !== currentFilters.sortDirection
+  ) {
+    publish(persisted);
+  }
+}
+
 function subscribe(listener: Listener): () => void {
   listeners.add(listener);
+  hydrateOnce();
   return () => {
     listeners.delete(listener);
   };
 }
 
-/**
- * Adopts the persisted filters on the first client read.
- *
- * The hydration happens inside the store read rather than in an effect: the
- * server snapshot keeps the first render matching the server output, and the
- * client's first read picks up what was saved on this device without a
- * setState-during-render cascade. The flag guarantees it runs once.
- */
+/** Pure: returns the cached value and never changes it. */
 function getSnapshot(): DashboardFilterState {
-  if (!hydratedFromStorage) {
-    hydratedFromStorage = true;
-    currentFilters = readPersistedFilters();
-  }
   return currentFilters;
 }
 

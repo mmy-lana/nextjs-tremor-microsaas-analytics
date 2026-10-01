@@ -8,7 +8,7 @@ import {
   KPI_LABEL,
   type ChartTone,
 } from '@/lib/chartUtils';
-import { cn, formatPercent } from '@/lib/utils';
+import { cn, EM_DASH, formatPercent } from '@/lib/utils';
 import type { KpiMetricKey, KpiResult } from '@/types/analytics';
 
 /**
@@ -37,27 +37,33 @@ export interface InteractiveChartInspectorProps {
   onClearPoint: () => void;
 }
 
+/**
+ * Picks the figure the inspector headlines for the selected metric.
+ *
+ * The current value is read from `current` and only the *delta* depends on
+ * `previous`. `previous` is null for the all-time preset and for any window
+ * that predates the data, and bailing out on it would blank the headline on
+ * exactly those ranges -- the reader is left with no number at all.
+ */
 function headlineFor(metric: KpiMetricKey, kpis: KpiResult): {
   value: string;
   delta: number | null;
   inverse: boolean;
 } {
   const { current, previous } = kpis;
-  if (previous === null) {
-    return { value: '', delta: null, inverse: metric === 'logoChurn' };
-  }
   switch (metric) {
     case 'netMrr':
     case 'arr':
       return {
         value: formatPercent(current.mrrGrowthPercent),
-        delta: current.mrrGrowthPercent,
+        delta: previous === null ? null : current.mrrGrowthPercent,
         inverse: false,
       };
     case 'nrr':
       return {
         value: formatPercent(current.netRevenueRetentionPercent, 2),
         delta:
+          previous === null ||
           current.netRevenueRetentionPercent === null ||
           previous.netRevenueRetentionPercent === null
             ? null
@@ -67,11 +73,14 @@ function headlineFor(metric: KpiMetricKey, kpis: KpiResult): {
     case 'logoChurn':
       return {
         value: formatPercent(current.logoChurnRatePercent, 2),
-        delta: current.logoChurnRatePercent - previous.logoChurnRatePercent,
+        delta:
+          previous === null
+            ? null
+            : current.logoChurnRatePercent - previous.logoChurnRatePercent,
         inverse: true,
       };
     default:
-      return { value: '', delta: null, inverse: false };
+      return { value: EM_DASH, delta: null, inverse: false };
   }
 }
 
@@ -99,7 +108,7 @@ export function InteractiveChartInspector({
             {KPI_LABEL[metric]}
           </p>
           <p className="mt-0.5 flex min-w-0 items-baseline gap-2">
-            {headline.value !== '' && (
+            {headline.value !== EM_DASH && (
               <span className="truncate text-lg font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
                 {headline.value}
               </span>

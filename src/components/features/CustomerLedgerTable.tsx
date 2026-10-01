@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/primitives/ConfirmDialog';
 import { EmptyStateCard } from '@/components/primitives/EmptyStateCard';
 import { SlideOverDrawer } from '@/components/primitives/SlideOverDrawer';
 import { STATUS_BADGE_CLASS, STATUS_LABEL, TIER_LABEL } from '@/lib/chartUtils';
+import { MAX_MRR_CENTS } from '@/lib/validators';
 import { selectLedgerCustomers } from '@/lib/calculations';
 import {
   cn,
@@ -110,6 +111,11 @@ export function CustomerLedgerTable({
       ? null
       : customers.find((customer) => customer.id === sheetCustomerId) ?? null;
 
+  const closeSheet = (): void => {
+    setPending(null);
+    setSheetCustomerId(null);
+  };
+
   const runAction = async (action: PendingAction, customer: CustomerRecord): Promise<void> => {
     setBusy(true);
     try {
@@ -141,8 +147,7 @@ export function CustomerLedgerTable({
           error = 'Unknown action';
       }
       if (error === null) {
-        setPending(null);
-        setSheetCustomerId(null);
+        closeSheet();
       }
     } finally {
       setBusy(false);
@@ -314,20 +319,22 @@ export function CustomerLedgerTable({
 
       <SlideOverDrawer
         open={sheetCustomer !== null}
-        onClose={() => {
-          setSheetCustomerId(null);
-          setPending(null);
-        }}
+        onClose={closeSheet}
         title={sheetCustomer?.organizationName ?? 'Customer'}
         description={sheetCustomer === null ? undefined : `${sheetCustomer.email} · v${sheetCustomer.version}`}
         placement="bottom"
       >
         {sheetCustomer !== null && (
           <RowActionSheet
+            // Keyed on the customer so React discards the previous instance.
+            // Without it the staged tier and price would survive a switch to a
+            // different row and be applied to whoever is now on screen.
+            key={sheetCustomer.id}
             customer={sheetCustomer}
             actions={actions}
             busy={busy}
             onRequestConfirm={(action) => setPending(action)}
+            onRequestSucceeded={closeSheet}
           />
         )}
       </SlideOverDrawer>
@@ -451,11 +458,14 @@ function RowActionSheet({
   actions,
   busy: parentBusy,
   onRequestConfirm,
+  onRequestSucceeded,
 }: {
   customer: CustomerRecord;
   actions: LedgerActions;
   busy: boolean;
   onRequestConfirm: (action: PendingAction) => void;
+  /** Dismiss the sheet after a write that does not route through the dialog. */
+  onRequestSucceeded: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   const tierLocked = parentBusy || busy;
@@ -464,13 +474,34 @@ function RowActionSheet({
     (customer.mrrCents / 100).toFixed(customer.mrrCents % 100 === 0 ? 0 : 2),
   );
 
-  const parsedCents = useMemo(() => {
-    const dollars = Number(price);
-    if (!Number.isFinite(dollars) || dollars < 0) {
-      return null;
+  /**
+   * Strict currency parsing.
+   *
+   * `Number()` accepts "1e5", " 12", "0x10" and "12abc" in ways a price field
+   * must never do, and a silently disabled button gives the user no idea why.
+   * Anything that is not plain dollars and cents is reported instead.
+   */
+  const priceResult = useMemo((): { cents: number | null; error: string | null } => {
+    const trimmed = price.trim();
+    if (trimmed === '') {
+      return { cents: null, error: 'Enter a monthly MRR in dollars.' };
     }
-    return Math.round(dollars * 100);
+    if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) {
+      return { cents: null, error: 'Use digits with at most two decimal places.' };
+    }
+    const cents = Math.round(Number(trimmed) * 100);
+    if (cents < 1) {
+      return { cents: null, error: 'A paying subscription needs an MRR of at least $0.01.' };
+    }
+    if (cents > MAX_MRR_CENTS) {
+      return { cents: null, error: `MRR must be $${MAX_MRR_CENTS / 100} or less.` };
+    }
+    return { cents, error: null };
   }, [price]);
+
+  const parsedCents = priceResult.cents;
+  const priceError = priceResult.error;
+  const priceValid = parsedCents !== null;
 
   const changeTier = async (): Promise<void> => {
     if (parsedCents === null) {
@@ -478,12 +509,15 @@ function RowActionSheet({
     }
     setBusy(true);
     try {
-      await actions.updateTier({
+      const error = await actions.updateTier({
         customerId: customer.id,
         newTier: tier,
         newMrrCents: parsedCents,
         expectedVersion: customer.version,
       });
+      if (error === null) {
+        onRequestSucceeded();
+      }
     } finally {
       setBusy(false);
     }
@@ -547,7 +581,7 @@ function RowActionSheet({
             <button
               type="button"
               onClick={() => void changeTier()}
-              disabled={tierLocked || parsedCents === null || parsedCents < 1}
+              disabled={tierLocked || !priceValid}
               data-testid="sheet-save-tier"
               className={cn(
                 actionButton,
@@ -573,7 +607,7 @@ function RowActionSheet({
                 onRequestConfirm({ kind: 'convert', tier, mrrCents: parsedCents });
               }
             }}
-            disabled={tierLocked || parsedCents === null || parsedCents < 1}
+            disabled={tierLocked || !priceValid}
             className={cn(
               actionButton,
               'border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800',
@@ -584,12 +618,18 @@ function RowActionSheet({
           </button>
           <button
             type="button"
-            onClick={() =>
-              void actions.cancelTrial({
-                customerId: customer.id,
-                expectedVersion: customer.version,
-              })
-            }
+            onClick={() => {
+              void actions
+                .cancelTrial({
+                  customerId: customer.id,
+                  expectedVersion: customer.version,
+                })
+                .then((error) => {
+                  if (error === null) {
+                    onRequestSucceeded();
+                  }
+                });
+            }}
             disabled={tierLocked}
             data-testid="sheet-cancel-trial"
             className={cn(
@@ -610,7 +650,7 @@ function RowActionSheet({
               onRequestConfirm({ kind: 'reactivate', tier, mrrCents: parsedCents });
             }
           }}
-          disabled={tierLocked || parsedCents === null || parsedCents < 1}
+          disabled={tierLocked || !priceValid}
           data-testid="sheet-reactivate"
           className={cn(
             actionButton,
@@ -648,11 +688,28 @@ function RowActionSheet({
           inputMode="decimal"
           value={price}
           onChange={(event) => setPrice(event.target.value)}
-          className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 text-base dark:border-zinc-700 dark:bg-zinc-900"
+          aria-invalid={priceError !== null}
+          aria-describedby={priceError === null ? 'sheet-price-hint' : 'sheet-price-error'}
+          className={cn(
+            'mt-1 min-h-11 w-full min-w-0 rounded-lg border bg-white px-3 text-base dark:bg-zinc-900',
+            priceError === null
+              ? 'border-zinc-300 dark:border-zinc-700'
+              : 'border-rose-500 dark:border-rose-700',
+          )}
         />
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          Used by tier changes, trial conversions and reactivations.
-        </p>
+        {priceError === null ? (
+          <p id="sheet-price-hint" className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Used by tier changes, trial conversions and reactivations.
+          </p>
+        ) : (
+          <p
+            id="sheet-price-error"
+            role="alert"
+            className="mt-1 text-xs text-rose-600 dark:text-rose-400"
+          >
+            {priceError}
+          </p>
+        )}
       </div>
     </div>
   );
