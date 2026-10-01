@@ -325,6 +325,7 @@ function playMovement(
   dayTime: (day: number) => Date,
   day: number,
   bias: 'up' | 'down' | 'either',
+  at?: Date,
 ): void {
   const { random } = timeline;
   const current = timeline.customer.mrrCents;
@@ -332,12 +333,13 @@ function playMovement(
     return;
   }
 
+  const occurredAt = at ?? dayTime(day);
   const direction = bias === 'either' ? (random() < 0.6 ? 'up' : 'down') : bias;
 
   if (direction === 'up') {
     const growth = Math.max(1, Math.round(current * (0.08 + random() * 0.27)));
     const ratio = growth / current;
-    applyMovement(timeline, 'expansion', dayTime(day), {
+    applyMovement(timeline, 'expansion', occurredAt, {
       mrrAfterCents: current + growth,
       tier: ratio > 0.2 ? tierAbove(timeline.customer.tier) : timeline.customer.tier,
     });
@@ -350,7 +352,7 @@ function playMovement(
     return;
   }
   const ratio = shrink / current;
-  applyMovement(timeline, 'contraction', dayTime(day), {
+  applyMovement(timeline, 'contraction', occurredAt, {
     mrrAfterCents: after,
     tier: ratio > 0.2 ? tierBelow(timeline.customer.tier, random) : timeline.customer.tier,
   });
@@ -645,12 +647,19 @@ function simulateCustomer(
     } else if (plan.trialOutcome === 'cancel') {
       applyMovement(timeline, 'trial_canceled', dayTime(convertDay));
     } else {
-      applyMovement(timeline, 'trial_converted', dayTime(convertDay));
-      applyMovement(timeline, 'new_business', dayTime(convertDay), {
+      // The conversion is two dependent movements: the zero-delta marker, then
+      // the opening `new_business`. They have to stay in that order in *time*,
+      // not just in the array, because the returned event list is sorted by
+      // `occurredAt` and two events sharing a millisecond would be ordered by
+      // id instead. One millisecond apart makes the order explicit.
+      const convertedAt = dayTime(convertDay);
+      const openedAt = new Date(convertedAt.getTime() + 1);
+      applyMovement(timeline, 'trial_converted', convertedAt);
+      applyMovement(timeline, 'new_business', openedAt, {
         mrrAfterCents: mrrCents,
         tier: plan.tier,
       });
-      customer.convertedAt = timeline.events[timeline.events.length - 1]?.occurredAt ?? null;
+      customer.convertedAt = openedAt.toISOString();
       simulateLifecycle(timeline, dayTime, plan.role, convertDay);
     }
   } else {
@@ -705,24 +714,56 @@ function ensureRecentActivity(
     )
     .map(({ index }) => index);
 
-  let slot = 0;
-  let day = RECENT_DAY_START + 1;
-  while (countRecent() < RECENT_EVENT_FLOOR && slot < movable.length) {
+  for (let slot = 0; slot < movable.length && countRecent() < RECENT_EVENT_FLOOR; slot += 1) {
     const index = movable[slot];
     if (index === undefined) {
-      break;
+      continue;
     }
     const timeline = timelines[index];
     if (timeline === undefined) {
-      break;
+      continue;
     }
-    if (day > LAST_EVENT_DAY) {
-      day = RECENT_DAY_START + 1;
+
+    // The injected movement has to land strictly after this account's own last
+    // event. The final list is sorted, which hides an out-of-order append, but
+    // the MRR the event claims to start from is the running balance at *append*
+    // time -- so an earlier timestamp would make `mrrBeforeCents` contradict the
+    // chronology the rest of the ledger is reconstructed from.
+    const lastAt = latestEventMs(timeline);
+    // `dayStart` is indexed from day 0, not from the epoch, so the instant has
+    // to be rebased onto the same scale before the two are compared.
+    const epochDayZero = dayStart(0).getTime();
+    let targetDay = Math.max(
+      RECENT_DAY_START + 1,
+      Math.floor((lastAt - epochDayZero) / MS_PER_DAY),
+    );
+
+    while (targetDay <= LAST_EVENT_DAY) {
+      const dayEnd = dayStart(targetDay).getTime() + MS_PER_DAY;
+      let at = dayTime(targetDay).getTime();
+      if (at <= lastAt) {
+        at = lastAt + 1;
+      }
+      if (at < dayEnd) {
+        playMovement(timeline, dayTime, targetDay, 'either', new Date(at));
+        break;
+      }
+      // No room left on that day; the next one may still fit.
+      targetDay += 1;
     }
-    playMovement(timeline, dayTime, day, 'either');
-    day += 1;
-    slot += 1;
   }
+}
+
+/** Latest `occurredAt` in a timeline, or the start of history when empty. */
+function latestEventMs(timeline: Timeline): number {
+  let latest = Number.NEGATIVE_INFINITY;
+  for (const event of timeline.events) {
+    const at = Date.parse(event.occurredAt);
+    if (at > latest) {
+      latest = at;
+    }
+  }
+  return latest === Number.NEGATIVE_INFINITY ? 0 : latest;
 }
 
 /**

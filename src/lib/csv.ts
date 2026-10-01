@@ -29,8 +29,17 @@ const FORMULA_TRIGGERS = new Set(['=', '+', '-', '@', '\t', '\r']);
 function escapeCell(value: string, isText: boolean): string {
   let cell = value;
   if (isText && cell.length > 0) {
-    const first = cell.charAt(0);
-    if (FORMULA_TRIGGERS.has(first)) {
+    // Two probes. The raw first character catches a trigger that *is* leading
+    // whitespace -- a tab or a carriage return is itself a listed trigger. The
+    // trimmed first character catches whitespace followed by `=`, `+`, `-` or
+    // `@`, because spreadsheet importers skip that whitespace before deciding
+    // whether a cell is a formula. The apostrophe goes at position zero, where
+    // the importer actually treats it as "this is text".
+    const probe = cell.trimStart();
+    if (
+      FORMULA_TRIGGERS.has(cell.charAt(0)) ||
+      (probe.length > 0 && FORMULA_TRIGGERS.has(probe.charAt(0)))
+    ) {
       cell = `'${cell}`;
     }
   }

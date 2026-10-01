@@ -280,6 +280,35 @@ describe('generateSeed', () => {
     }
   });
 
+  it('keeps each customer\'s MRR transitions consistent with chronology', () => {
+    // The event list is sorted before it is returned, which hides an
+    // out-of-order append. What still matters is that `mrrBeforeCents` matches
+    // the running balance in chronological order: a movement injected with a
+    // timestamp earlier than the account\'s last event would otherwise claim to
+    // start from a balance the ledger had not reached yet.
+    for (const seed of [42, 7, 99, 1234]) {
+      const source = generateSeed(FROZEN_NOW, seed);
+      const ordered = [...source.events].sort((a, b) =>
+        a.occurredAt === b.occurredAt
+          ? a.id.localeCompare(b.id)
+          : a.occurredAt.localeCompare(b.occurredAt),
+      );
+
+      const running = new Map<string, number>();
+      for (const event of ordered) {
+        const previous = running.get(event.customerId) ?? 0;
+        expect(event.mrrBeforeCents, `seed ${seed} event ${event.id}`).toBe(previous);
+        running.set(event.customerId, event.mrrAfterCents);
+      }
+
+      for (const customer of source.customers) {
+        expect(running.get(customer.id) ?? 0, `seed ${seed} customer ${customer.id}`).toBe(
+          customer.mrrCents,
+        );
+      }
+    }
+  });
+
   it('assigns unique ids and emails across the book', () => {
     const snapshot = seedSnapshot();
     expect(new Set(snapshot.customers.map((c) => c.id)).size).toBe(

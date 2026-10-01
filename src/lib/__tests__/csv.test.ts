@@ -129,6 +129,30 @@ describe('formula injection guard', () => {
     }
   });
 
+  it('sees through leading whitespace when checking for a formula trigger', () => {
+    const base = snapshot();
+    // Spreadsheet importers discard leading whitespace before deciding whether
+    // a cell is a formula, so an untrimmed guard let all of these through.
+    const payloads = ['   =cmd', '\t+1234', '  @SUM(A1)', '\r-1+1', '  '];
+
+    const hostile = {
+      ...base,
+      customers: base.customers.map((customer, index) =>
+        index < payloads.length
+          ? { ...customer, organizationName: payloads[index] ?? 'x' }
+          : customer,
+      ),
+    };
+
+    const names = dataRows(buildCustomersCsv(hostile, baseFilters()))
+      .slice(1)
+      .map((row) => splitCsvLine(row)[0] ?? '');
+
+    for (const payload of payloads.slice(0, 4)) {
+      expect(names, `payload ${JSON.stringify(payload)}`).toContain(`'${payload}`);
+    }
+  });
+
   it('leaves an ordinary name alone', () => {
     const csv = buildCustomersCsv(snapshot(), baseFilters());
     expect(csv).not.toContain(`"'`);

@@ -507,7 +507,11 @@ function netRevenueRetention(input: WindowSummaryInput): number | null {
     }
   }
 
-  return ((startMrr + expansion - contraction - churn) / startMrr) * 100;
+  // `expansion`, `contraction` and `churn` are sums of signed event deltas.
+  // Expansion deltas are positive and contraction and churn deltas are already
+  // negative, so all three are added. Subtracting the last two would add their
+  // magnitudes back and push NRR *up* every time an account churned.
+  return ((startMrr + expansion + contraction + churn) / startMrr) * 100;
 }
 
 function trialConversionRate(input: WindowSummaryInput): number | null {
@@ -837,9 +841,12 @@ export function computeCohorts(
       let retained = 0;
       for (const id of members) {
         const history = eventsByCustomer.get(id);
+        // An account with no churn record has never left, so it must sort *after*
+        // every boundary. NEGATIVE_INFINITY would place it before all of them
+        // and mark a perfectly healthy cohort as entirely lost.
         const churnedAt =
           history === undefined
-            ? Number.NEGATIVE_INFINITY
+            ? Number.POSITIVE_INFINITY
             : history.reduce(
                 (latest, entry) => (entry.churnedAt > latest ? entry.churnedAt : latest),
                 Number.NEGATIVE_INFINITY,

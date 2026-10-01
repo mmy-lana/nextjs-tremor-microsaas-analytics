@@ -446,13 +446,160 @@ describe('computeKpis', () => {
       }
     }
 
+    // Deltas are signed, so contraction and churn accumulate negative values and
+    // are added. Subtracting them would inflate NRR on every churn.
+    expect(churn).toBeLessThanOrEqual(0);
+    expect(contraction).toBeLessThanOrEqual(0);
+
     expect(startMrr).toBeGreaterThan(0);
     // The 30-day window really does contain signups the cohort formula skips.
     expect(excludedFromCohort).toBeGreaterThanOrEqual(0);
     expect(current.netRevenueRetentionPercent).toBeCloseTo(
-      ((startMrr + expansion - contraction - churn) / startMrr) * 100,
+      ((startMrr + expansion + contraction + churn) / startMrr) * 100,
       6,
     );
+  });
+
+  it('drops NRR below 100 when the cohort churns, and further on contraction', () => {
+    // Built by hand because the seeded window contains expansion as well as
+    // losses, and NRR legitimately exceeds 100 when growth outweighs churn. A
+    // synthetic window with losses only is the only unambiguous signal: the
+    // pre-fix formula subtracted already-negative deltas and returned 200.
+    const build = (movementType: 'churn' | 'contraction'): DashboardStateSnapshot => {
+      const mrrAfter = movementType === 'churn' ? 0 : 8_000;
+      const occurredAt = '2026-03-10T00:00:00.000Z';
+      return {
+        schemaVersion: 1,
+        revision: 1,
+        asOf: '2026-03-17T00:00:00.000Z',
+        updatedAt: '2026-03-17T00:00:00.000Z',
+        customers: [
+          {
+            id: 'cus_nrrfixture01',
+            version: 2,
+            organizationName: 'Nrr Fixture Co',
+            email: 'ops@nrrfixture.example',
+            tier: 'pro',
+            status: movementType === 'churn' ? 'canceled' : 'active',
+            billingInterval: 'monthly',
+            mrrCents: mrrAfter,
+            previousMrrCents: movementType === 'churn' ? 10_000 : 10_000,
+            channel: 'direct',
+            countryCode: 'US',
+            seatCount: 5,
+            apiCalls30d: 100,
+            cohortMonth: '2026-01',
+            createdAt: '2026-02-01T00:00:00.000Z',
+            updatedAt: occurredAt,
+            trialStartedAt: null,
+            trialEndsAt: null,
+            convertedAt: null,
+            canceledAt: movementType === 'churn' ? occurredAt : null,
+          },
+        ],
+        events: [
+          {
+            id: 'evt_nrrfixture0001',
+            customerId: 'cus_nrrfixture01',
+            organizationName: 'Nrr Fixture Co',
+            tier: 'pro',
+            channel: 'direct',
+            type: 'new_business',
+            mrrBeforeCents: 0,
+            mrrAfterCents: 10_000,
+            deltaMrrCents: 10_000,
+            previousTier: null,
+            currentTier: 'pro',
+            occurredAt: '2026-02-01T00:00:00.000Z',
+            createdAt: '2026-02-01T00:00:00.000Z',
+          },
+          {
+            id: 'evt_nrrfixture0002',
+            customerId: 'cus_nrrfixture01',
+            organizationName: 'Nrr Fixture Co',
+            tier: 'pro',
+            channel: 'direct',
+            type: movementType,
+            mrrBeforeCents: 10_000,
+            mrrAfterCents: mrrAfter,
+            deltaMrrCents: mrrAfter - 10_000,
+            previousTier: 'pro',
+            currentTier: 'pro',
+            occurredAt,
+            createdAt: occurredAt,
+          },
+        ],
+      };
+    };
+
+    const churned = computeKpis(
+      build('churn'),
+      baseFilters({ dateRange: '30d' }),
+      FROZEN_NOW,
+    );
+    // The whole cohort was lost, so NRR is 0 -- not 200.
+    expect(churned.current.netRevenueRetentionPercent).toBeCloseTo(0, 6);
+
+    const contracted = computeKpis(
+      build('contraction'),
+      baseFilters({ dateRange: '30d' }),
+      FROZEN_NOW,
+    );
+    // 10_000 starting, 2_000 lost.
+    expect(contracted.current.netRevenueRetentionPercent).toBeCloseTo(80, 6);
+  });
+
+  it('leaves NRR at 100 when the cohort had no movement in the window', () => {
+    const source: DashboardStateSnapshot = {
+      schemaVersion: 1,
+      revision: 1,
+      asOf: '2026-03-17T00:00:00.000Z',
+      updatedAt: '2026-03-17T00:00:00.000Z',
+      customers: [
+        {
+          id: 'cus_steady00001',
+          version: 1,
+          organizationName: 'Steady Co',
+          email: 'ops@steady.example',
+          tier: 'pro',
+          status: 'active',
+          billingInterval: 'monthly',
+          mrrCents: 10_000,
+          previousMrrCents: 0,
+          channel: 'direct',
+          countryCode: 'US',
+          seatCount: 5,
+          apiCalls30d: 100,
+          cohortMonth: '2026-01',
+          createdAt: '2026-01-05T00:00:00.000Z',
+          updatedAt: '2026-01-05T00:00:00.000Z',
+          trialStartedAt: null,
+          trialEndsAt: null,
+          convertedAt: null,
+          canceledAt: null,
+        },
+      ],
+      events: [
+        {
+          id: 'evt_steady000001',
+          customerId: 'cus_steady00001',
+          organizationName: 'Steady Co',
+          tier: 'pro',
+          channel: 'direct',
+          type: 'new_business',
+          mrrBeforeCents: 0,
+          mrrAfterCents: 10_000,
+          deltaMrrCents: 10_000,
+          previousTier: null,
+          currentTier: 'pro',
+          occurredAt: '2026-01-05T00:00:00.000Z',
+          createdAt: '2026-01-05T00:00:00.000Z',
+        },
+      ],
+    };
+
+    const { current } = computeKpis(source, baseFilters({ dateRange: '30d' }), FROZEN_NOW);
+    expect(current.netRevenueRetentionPercent).toBeCloseTo(100, 6);
   });
 
   it('computes trial conversion only over trials that actually ended', () => {
@@ -746,6 +893,142 @@ describe('computeCohorts', () => {
       expect(row.netDollarRetentionPercent).toBeNull();
       expect(row.initialCustomers).toBe(0);
     }
+  });
+
+  it('retains a cohort that never churned across every elapsed month', () => {
+    // A single account that signs up and never leaves. Before the sentinel fix
+    // the no-churn case resolved to -Infinity, which is not greater than any
+    // month boundary, so the whole cohort reported 0% retention.
+    const customer = {
+      id: 'cus_loyal000001',
+      version: 1,
+      organizationName: 'Loyal Co',
+      email: 'founders@loyal.example',
+      tier: 'pro' as const,
+      status: 'active' as const,
+      billingInterval: 'monthly' as const,
+      mrrCents: 10_000,
+      previousMrrCents: 0,
+      channel: 'direct' as const,
+      countryCode: 'US',
+      seatCount: 5,
+      apiCalls30d: 100,
+      cohortMonth: '2026-01',
+      createdAt: '2026-01-05T00:00:00.000Z',
+      updatedAt: '2026-01-05T00:00:00.000Z',
+      trialStartedAt: null,
+      trialEndsAt: null,
+      convertedAt: null,
+      canceledAt: null,
+    };
+    const source: DashboardStateSnapshot = {
+      schemaVersion: 1,
+      revision: 1,
+      asOf: '2026-03-17T00:00:00.000Z',
+      updatedAt: '2026-03-17T00:00:00.000Z',
+      customers: [customer],
+      events: [
+        {
+          id: 'evt_loyal00000001',
+          customerId: customer.id,
+          organizationName: customer.organizationName,
+          tier: customer.tier,
+          channel: customer.channel,
+          type: 'new_business',
+          mrrBeforeCents: 0,
+          mrrAfterCents: 10_000,
+          deltaMrrCents: 10_000,
+          previousTier: null,
+          currentTier: customer.tier,
+          occurredAt: '2026-01-05T00:00:00.000Z',
+          createdAt: '2026-01-05T00:00:00.000Z',
+        },
+      ],
+    };
+
+    const rows = computeCohorts(source, baseFilters(), FROZEN_NOW);
+    const january = rows.find((row) => row.cohortMonth === '2026-01');
+    expect(january).toBeDefined();
+    expect(january?.initialCustomers).toBe(1);
+    expect(january?.initialMrrCents).toBe(10_000);
+    expect(january?.netDollarRetentionPercent).toBeCloseTo(100, 6);
+
+    // M0 through M2 have elapsed by March; M3 onward has not.
+    expect(january?.retentionByMonth[0]).toBe(100);
+    expect(january?.retentionByMonth[1]).toBe(100);
+    expect(january?.retentionByMonth[2]).toBe(100);
+    expect(january?.retentionByMonth[3]).toBeNull();
+  });
+
+  it('drops an account from retention only from the month it churned', () => {
+    const customer = {
+      id: 'cus_leaver000001',
+      version: 1,
+      organizationName: 'Leaver Co',
+      email: 'ops@leaver.example',
+      tier: 'pro' as const,
+      status: 'canceled' as const,
+      billingInterval: 'monthly' as const,
+      mrrCents: 0,
+      previousMrrCents: 10_000,
+      channel: 'direct' as const,
+      countryCode: 'US',
+      seatCount: 5,
+      apiCalls30d: 100,
+      cohortMonth: '2026-01',
+      createdAt: '2026-01-05T00:00:00.000Z',
+      updatedAt: '2026-02-10T00:00:00.000Z',
+      trialStartedAt: null,
+      trialEndsAt: null,
+      convertedAt: null,
+      canceledAt: '2026-02-10T00:00:00.000Z',
+    };
+    const source: DashboardStateSnapshot = {
+      schemaVersion: 1,
+      revision: 1,
+      asOf: '2026-03-17T00:00:00.000Z',
+      updatedAt: '2026-03-17T00:00:00.000Z',
+      customers: [customer],
+      events: [
+        {
+          id: 'evt_leaver0000001',
+          customerId: customer.id,
+          organizationName: customer.organizationName,
+          tier: customer.tier,
+          channel: customer.channel,
+          type: 'new_business',
+          mrrBeforeCents: 0,
+          mrrAfterCents: 10_000,
+          deltaMrrCents: 10_000,
+          previousTier: null,
+          currentTier: customer.tier,
+          occurredAt: '2026-01-05T00:00:00.000Z',
+          createdAt: '2026-01-05T00:00:00.000Z',
+        },
+        {
+          id: 'evt_leaver0000002',
+          customerId: customer.id,
+          organizationName: customer.organizationName,
+          tier: customer.tier,
+          channel: customer.channel,
+          type: 'churn',
+          mrrBeforeCents: 10_000,
+          mrrAfterCents: 0,
+          deltaMrrCents: -10_000,
+          previousTier: customer.tier,
+          currentTier: customer.tier,
+          occurredAt: '2026-02-10T00:00:00.000Z',
+          createdAt: '2026-02-10T00:00:00.000Z',
+        },
+      ],
+    };
+
+    const rows = computeCohorts(source, baseFilters(), FROZEN_NOW);
+    const january = rows.find((row) => row.cohortMonth === '2026-01');
+    // Still counted in the month they signed up, gone from the next one on.
+    expect(january?.retentionByMonth[0]).toBe(100);
+    expect(january?.retentionByMonth[1]).toBe(0);
+    expect(january?.netDollarRetentionPercent).toBe(0);
   });
 
   it('narrows to a tier and excludes its accounts from other cohorts', () => {
