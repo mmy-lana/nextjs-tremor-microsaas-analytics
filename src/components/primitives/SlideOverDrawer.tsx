@@ -119,7 +119,7 @@ export function SlideOverDrawer({
     };
   }, [handleClose, open]);
 
-  if (!hydrated) {
+  if (!hydrated || !open) {
     return null;
   }
 

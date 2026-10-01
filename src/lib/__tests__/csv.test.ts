@@ -300,3 +300,14 @@ function splitCsvLine(line: string): string[] {
   cells.push(current);
   return cells;
 }
+describe('percentage formatting precision', () => {
+  it('supports zero, one and two decimal places', async () => {
+    const { formatPercent } = await import('@/lib/utils');
+    expect(formatPercent(100, 0)).toBe('100%');
+    expect(formatPercent(100, 1)).toBe('100.0%');
+    expect(formatPercent(100, 2)).toBe('100.00%');
+    expect(formatPercent(42.56, 0)).toBe('43%');
+    expect(formatPercent(42.56, 1)).toBe('42.6%');
+    expect(formatPercent(null, 0)).toBe('—');
+  });
+});

@@ -223,9 +223,9 @@ export function formatAxisCurrencyFromCents(value: number): string {
   return formatCurrencyWholeFromCents(value);
 }
 
-/** Percentage axis tick. */
+/** Percentage axis tick, rounded to whole percent. */
 export function formatAxisPercent(value: number): string {
-  return formatPercent(value, 2).replace(/\.00$/, '');
+  return formatPercent(value, 0);
 }
 
 /**

@@ -140,14 +140,16 @@ export function DonutChart({
                 {slice.label}
               </span>
             </span>
-            <span
-              className={cn(
-                'shrink-0 text-sm font-medium tabular-nums',
-                CHART_TONE_CLASS[slice.tone],
-              )}
-            >
-              {slice.formattedValue}
-              <span className="ml-1 text-xs font-normal text-zinc-500 dark:text-zinc-400">
+            <span className="flex min-w-0 shrink-0 items-baseline gap-1.5">
+              <span
+                className={cn(
+                  'text-sm font-medium tabular-nums',
+                  CHART_TONE_CLASS[slice.tone],
+                )}
+              >
+                {slice.formattedValue}
+              </span>
+              <span className="text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
                 {slice.sharePercent.toFixed(1)}%
               </span>
             </span>

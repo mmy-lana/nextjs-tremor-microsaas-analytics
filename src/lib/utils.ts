@@ -50,6 +50,10 @@ const integer = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 });
 
+const percentNoDecimal = new Intl.NumberFormat('en-US', {
+  maximumFractionDigits: 0,
+});
+
 const percentOneDecimal = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
@@ -141,18 +145,23 @@ export function formatInteger(value: number): string {
 }
 
 /** `12.3%`. A `null` value is a real "not computable" state, rendered as an em dash. */
-export function formatPercent(value: number | null, fractionDigits: 1 | 2 = 1): string {
+export function formatPercent(value: number | null, fractionDigits: 0 | 1 | 2 = 1): string {
   if (value === null || !Number.isFinite(value)) {
     return EM_DASH;
   }
-  const formatter = fractionDigits === 2 ? percentTwoDecimals : percentOneDecimal;
+  const formatter =
+    fractionDigits === 0
+      ? percentNoDecimal
+      : fractionDigits === 2
+        ? percentTwoDecimals
+        : percentOneDecimal;
   return `${formatter.format(value)}%`;
 }
 
 /** `+4.2%` / `-1.1%` / `0.0%`. */
 export function formatSignedPercent(
   value: number | null,
-  fractionDigits: 1 | 2 = 1,
+  fractionDigits: 0 | 1 | 2 = 1,
 ): string {
   if (value === null || !Number.isFinite(value)) {
     return EM_DASH;
