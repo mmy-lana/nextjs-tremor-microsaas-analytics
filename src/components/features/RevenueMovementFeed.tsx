@@ -59,7 +59,14 @@ export function RevenueMovementFeed({
         const at = Date.parse(event.occurredAt);
         return at > window.startDayEndMs && at <= window.endDayEndMs;
       })
-      .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt))
+      // The id tie-breaker keeps the order total. Two movements can share a
+      // millisecond, and an unstable sort would reshuffle the feed between
+      // renders for no reason the user can see.
+      .sort(
+        (a, b) =>
+          Date.parse(b.occurredAt) - Date.parse(a.occurredAt) ||
+          b.id.localeCompare(a.id),
+      )
       .slice(0, limit);
   }, [filters, limit, now, snapshot]);
 

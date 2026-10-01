@@ -343,6 +343,87 @@ test.describe('interaction', () => {
     await expect(page.getByTestId('kpi-card-netMrr')).toContainText(/\d/);
   });
 
+  test('the export menu is operable from the keyboard alone', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/');
+    await waitForDashboard(page);
+
+    const toggle = page.getByTestId('export-menu-toggle');
+    await toggle.focus();
+
+    // ArrowDown opens the menu per the ARIA menu button pattern, and focus
+    // moves into the first item rather than staying on the trigger.
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('menu', { name: 'Export data' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Customers CSV' })).toBeFocused();
+
+    // Arrows move between the items and wrap at the ends.
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('menuitem', { name: 'Daily MRR CSV' })).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('menuitem', { name: 'Customers CSV' })).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await expect(page.getByRole('menuitem', { name: 'Daily MRR CSV' })).toBeFocused();
+
+    // End and Home jump to the ends.
+    await page.keyboard.press('Home');
+    await expect(page.getByRole('menuitem', { name: 'Customers CSV' })).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(page.getByRole('menuitem', { name: 'Daily MRR CSV' })).toBeFocused();
+
+    // Escape closes and hands focus back to the trigger.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu', { name: 'Export data' })).toBeHidden();
+    await expect(toggle).toBeFocused();
+  });
+
+  test('the bottom action sheet stays within the viewport at 360px', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto('/');
+    await waitForDashboard(page);
+
+    await page.getByTestId('open-filters').click();
+    const drawer = page.getByTestId('slide-over-drawer');
+    await expect(drawer).toBeVisible();
+
+    const box = await drawer.boundingBox();
+    expect(box).not.toBeNull();
+    if (box !== null) {
+      // 85dvh of a 640px viewport, and it must not start above the top edge.
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(640 + 1);
+    }
+
+    // The Apply action is reachable without the sheet being cut off.
+    await expect(page.getByTestId('apply-filters')).toBeInViewport();
+  });
+
+  test('the filter bar is not covered by the header on a notched viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+    await waitForDashboard(page);
+
+    // Scroll the filter bar to the top of the viewport, which is where its
+    // sticky offset has to hold it clear of the header.
+    await page.evaluate(() => window.scrollTo(0, 1200));
+    await page.waitForTimeout(200);
+
+    const headerBottom = await page.evaluate(() => {
+      const header = document.querySelector('header');
+      return header === null ? 0 : header.getBoundingClientRect().bottom;
+    });
+    const filtersTop = await page.evaluate(() => {
+      const bar = document.querySelector('[data-testid="open-filters"]');
+      const container = bar?.closest('.sticky');
+      return container === null || container === undefined
+        ? Number.NaN
+        : container.getBoundingClientRect().top;
+    });
+
+    expect(Number.isNaN(filtersTop)).toBe(false);
+    expect(filtersTop).toBeGreaterThanOrEqual(headerBottom - 1);
+  });
+
   test('the seed survives a reload and stays consistent', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/');

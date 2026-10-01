@@ -203,7 +203,12 @@ export function FilterControlBar({ filters, onChange, onReset }: FilterControlBa
   };
 
   return (
-    <div className="sticky top-16 z-20 -mx-3 mb-4 border-b border-zinc-200 bg-white/95 px-3 py-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95 sm:-mx-4 sm:px-4">
+    <div
+      // The header is `sticky top-0` with a safe-area top padding, so on a
+      // notched device it is taller than 4rem. A hardcoded offset left the
+      // filter bar tucked underneath it and the first row unreachable.
+      className="sticky top-[calc(4rem+env(safe-area-inset-top,0px))] z-20 -mx-3 mb-4 border-b border-zinc-200 bg-white/95 px-3 py-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95 sm:-mx-4 sm:px-4"
+    >
       <div className="hidden min-w-0 items-end gap-3 md:flex">
         <div className="min-w-0 flex-1">
           <FilterFields filters={filters} onChange={onChange} idPrefix="desktop" />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, Download, Menu, RotateCcw, UserPlus } from 'lucide-react';
 
 import { ThemeToggle } from '@/components/primitives/ThemeToggle';
@@ -39,8 +39,98 @@ export function AppHeader({
 }: AppHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const exportTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  // Set when the menu was opened from the keyboard, so the effect below moves
+  // focus into it. A click open leaves focus on the trigger, which is where the
+  // pointer already is. A ref rather than state: this is a one-shot instruction
+  // consumed by the effect, not a value anything renders from.
+  const focusFirstExportItemRef = useRef(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
+
+  const closeExportMenu = useCallback((restoreFocus: boolean) => {
+    setExportOpen(false);
+    focusFirstExportItemRef.current = false;
+    if (restoreFocus) {
+      exportTriggerRef.current?.focus();
+    }
+  }, []);
+
+  // Runs on commit once the menu is in the DOM, so there is something to focus.
+  useEffect(() => {
+    if (!exportOpen || !focusFirstExportItemRef.current) {
+      return;
+    }
+    focusFirstExportItemRef.current = false;
+    exportMenuRef.current
+      ?.querySelector<HTMLButtonElement>('[role="menuitem"]')
+      ?.focus();
+  }, [exportOpen]);
+
+  /**
+   * WAI-ARIA menu keyboard model: arrows move between items, Home and End jump
+   * to the ends, Escape closes and returns focus to the trigger, and Tab leaves
+   * the menu entirely rather than walking its items.
+   */
+  const onExportMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    const items = Array.from(
+      exportMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+    );
+    if (items.length === 0) {
+      return;
+    }
+    const currentIndex = items.findIndex((item) => item === document.activeElement);
+
+    const focusAt = (index: number): void => {
+      const wrapped = ((index % items.length) + items.length) % items.length;
+      items[wrapped]?.focus();
+    };
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        focusAt(currentIndex + 1);
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        focusAt(currentIndex - 1);
+        break;
+      case 'Home':
+        event.preventDefault();
+        focusAt(0);
+        break;
+      case 'End':
+        event.preventDefault();
+        focusAt(items.length - 1);
+        break;
+      case 'Escape':
+        event.preventDefault();
+        closeExportMenu(true);
+        break;
+      case 'Tab':
+        closeExportMenu(false);
+        break;
+      default:
+        break;
+    }
+  };
+
+  // Escape closes the menu from anywhere, including while focus is still on the
+  // trigger, and a click outside dismisses it without stealing focus back.
+  useEffect(() => {
+    if (!exportOpen) {
+      return;
+    }
+    const onDocumentKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeExportMenu(true);
+      }
+    };
+    document.addEventListener('keydown', onDocumentKeyDown);
+    return () => document.removeEventListener('keydown', onDocumentKeyDown);
+  }, [closeExportMenu, exportOpen]);
 
   const runReset = async (): Promise<void> => {
     setResetting(true);
@@ -102,9 +192,18 @@ export function AppHeader({
           <div className="relative">
             <button
               type="button"
+              ref={exportTriggerRef}
               onClick={() => setExportOpen((open) => !open)}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown' && !exportOpen) {
+                  event.preventDefault();
+                  focusFirstExportItemRef.current = true;
+                  setExportOpen(true);
+                }
+              }}
               aria-expanded={exportOpen}
               aria-haspopup="menu"
+              aria-controls={exportOpen ? 'export-menu' : undefined}
               aria-label="Export data"
               data-testid="export-menu-toggle"
               className={cn(
@@ -124,11 +223,14 @@ export function AppHeader({
                 <div
                   className="fixed inset-0 z-10"
                   aria-hidden="true"
-                  onClick={() => setExportOpen(false)}
+                  onClick={() => closeExportMenu(false)}
                 />
                 <div
+                  id="export-menu"
+                  ref={exportMenuRef}
                   role="menu"
                   aria-label="Export data"
+                  onKeyDown={onExportMenuKeyDown}
                   className={cn(
                     'absolute right-0 z-20 mt-1 min-w-52 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg',
                     'dark:border-zinc-800 dark:bg-zinc-900',
@@ -138,7 +240,7 @@ export function AppHeader({
                     type="button"
                     role="menuitem"
                     onClick={() => {
-                      setExportOpen(false);
+                      closeExportMenu(false);
                       onExportCustomers();
                     }}
                     className={cn(
@@ -154,7 +256,7 @@ export function AppHeader({
                     type="button"
                     role="menuitem"
                     onClick={() => {
-                      setExportOpen(false);
+                      closeExportMenu(false);
                       onExportDailyMrr();
                     }}
                     className={cn(

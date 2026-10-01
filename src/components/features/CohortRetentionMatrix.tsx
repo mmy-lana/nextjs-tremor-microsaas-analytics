@@ -12,11 +12,7 @@ import {
   formatMonthYear,
   formatPercent,
 } from '@/lib/utils';
-import type {
-  CohortRetentionRow,
-  DashboardFilterState,
-  DashboardStateSnapshot,
-} from '@/types/analytics';
+import type { DashboardFilterState, DashboardStateSnapshot } from '@/types/analytics';
 
 /**
  * Logo and dollar retention by signup cohort.
@@ -34,12 +30,18 @@ export interface CohortRetentionMatrixProps {
   now: Date;
 }
 
-function monthLabels(row: CohortRetentionRow): string[] {
+/**
+ * Column headers for one cohort: `M0 Jan`, `M1 Feb`, and so on.
+ *
+ * Built from the cohort key rather than from the first row, so the headers stay
+ * correct when the earliest cohort in the window is empty and therefore absent.
+ */
+function monthLabels(cohortMonth: string): string[] {
+  const [year, month] = cohortMonth.split('-');
+  const base = Number(year ?? '1970');
+  const startIndex = Number(month ?? '1') - 1;
   return Array.from({ length: COHORT_MONTHS }, (_, offset) => {
-    const [year, month] = row.cohortMonth.split('-');
-    const base = Number(year ?? '1970');
-    const index = Number(month ?? '1') - 1 + offset;
-    const date = new Date(Date.UTC(base, index, 1));
+    const date = new Date(Date.UTC(base, startIndex + offset, 1));
     return `M${offset} ${formatMonthShort(date)}`;
   });
 }
@@ -48,6 +50,14 @@ export function CohortRetentionMatrix({ snapshot, filters, now }: CohortRetentio
   const rows = useMemo(
     () => computeCohorts(snapshot, filters, now),
     [filters, now, snapshot],
+  );
+
+  // One header row for the whole table. Derived from the newest cohort so the
+  // labels stay correct even when the earliest cohort has no members, and
+  // memoised because they only change when the cohorts do.
+  const headers = useMemo(
+    () => monthLabels(rows[rows.length - 1]?.cohortMonth ?? ''),
+    [rows],
   );
 
   const totalAccounts = rows.reduce((acc, row) => acc + row.initialCustomers, 0);
@@ -94,19 +104,15 @@ export function CohortRetentionMatrix({ snapshot, filters, now }: CohortRetentio
               >
                 Cohort
               </th>
-              {Array.from({ length: COHORT_MONTHS }, (_, offset) => {
-                const sample = rows[0];
-                const labels = sample === undefined ? [] : monthLabels(sample);
-                return (
-                  <th
-                    key={offset}
-                    scope="col"
-                    className="border-b border-zinc-200 px-2 py-2 text-center text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:text-zinc-400"
-                  >
-                    {labels[offset] ?? `M${offset}`}
-                  </th>
-                );
-              })}
+              {headers.map((label, offset) => (
+                <th
+                  key={offset}
+                  scope="col"
+                  className="border-b border-zinc-200 px-2 py-2 text-center text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:text-zinc-400"
+                >
+                  {label}
+                </th>
+              ))}
               <th
                 scope="col"
                 className="border-b border-zinc-200 px-3 py-2 text-right text-xs font-medium text-zinc-500 dark:border-zinc-800 dark:text-zinc-400"

@@ -153,7 +153,7 @@ export function SlideOverDrawer({
           'dark:border-zinc-800 dark:bg-zinc-950',
           placement === 'side'
             ? 'h-full w-[min(20rem,88vw)] border-r'
-            : 'max-h-[85vh] w-full rounded-t-2xl border-t',
+            : 'max-h-[85dvh] w-full rounded-t-2xl border-t',
           className,
         )}
       >
