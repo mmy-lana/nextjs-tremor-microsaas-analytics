@@ -8,7 +8,6 @@ import {
   cn,
   formatCompactCurrencyFromCents,
   formatInteger,
-  formatMonthShort,
   formatMonthYear,
   formatPercent,
 } from '@/lib/utils';
@@ -31,33 +30,23 @@ export interface CohortRetentionMatrixProps {
 }
 
 /**
- * Column headers for one cohort: `M0 Jan`, `M1 Feb`, and so on.
+ * Column headers.
  *
- * Built from the cohort key rather than from the first row, so the headers stay
- * correct when the earliest cohort in the window is empty and therefore absent.
+ * Deliberately relative -- `M0` through `M5` -- because M0 means a different
+ * calendar month on every row. Labelling the columns with the months of any one
+ * cohort reads as a claim about the whole table and is wrong for the rest.
+ *
+ * Constant, so it is built once at module load rather than per render.
  */
-function monthLabels(cohortMonth: string): string[] {
-  const [year, month] = cohortMonth.split('-');
-  const base = Number(year ?? '1970');
-  const startIndex = Number(month ?? '1') - 1;
-  return Array.from({ length: COHORT_MONTHS }, (_, offset) => {
-    const date = new Date(Date.UTC(base, startIndex + offset, 1));
-    return `M${offset} ${formatMonthShort(date)}`;
-  });
-}
+const COLUMN_HEADERS: readonly string[] = Array.from(
+  { length: COHORT_MONTHS },
+  (_, offset) => `M${offset}`,
+);
 
 export function CohortRetentionMatrix({ snapshot, filters, now }: CohortRetentionMatrixProps) {
   const rows = useMemo(
     () => computeCohorts(snapshot, filters, now),
     [filters, now, snapshot],
-  );
-
-  // One header row for the whole table. Derived from the newest cohort so the
-  // labels stay correct even when the earliest cohort has no members, and
-  // memoised because they only change when the cohorts do.
-  const headers = useMemo(
-    () => monthLabels(rows[rows.length - 1]?.cohortMonth ?? ''),
-    [rows],
   );
 
   const totalAccounts = rows.reduce((acc, row) => acc + row.initialCustomers, 0);
@@ -104,7 +93,7 @@ export function CohortRetentionMatrix({ snapshot, filters, now }: CohortRetentio
               >
                 Cohort
               </th>
-              {headers.map((label, offset) => (
+              {COLUMN_HEADERS.map((label, offset) => (
                 <th
                   key={offset}
                   scope="col"
