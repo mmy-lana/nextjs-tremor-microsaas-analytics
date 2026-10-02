@@ -1,127 +1,229 @@
-# nextjs-tremor-microsaas-analytics
+# Micro-SaaS Analytics Dashboard
 
-Micro-SaaS Analytics Dashboard built with Next.js App Router, Tailwind CSS v4, and self-contained Recharts primitives.
+A high-performance, precision-engineered B2B Micro-SaaS analytics dashboard built with Next.js (App Router), Tailwind CSS v4, and self-contained Recharts data visualization primitives. Engineered to emulate the aesthetic and rigor of Tier-1 financial tools (Vercel, Stripe), featuring double-entry event-sourced ledger reconstruction, cross-tab atomic concurrency, and responsive mobile-first ergonomics.
 
-## Requirements
-- Node.js `>=20.9.0` (the floor declared by the installed Next.js)
-- pnpm `11.22.0` (pinned through the `packageManager` field)
+- Repository: https://github.com/mmy-lana/nextjs-tremor-microsaas-analytics
+- Live Application: https://nextjs-tremor-microsaas-analytics.vercel.app
 
-## Install
+---
+
+## Key Features
+
+- Event-Sourced Financial Ledger: Historical and current MRR values are never stored as mutable totals; they are reconstructed on-the-fly from an append-only timeline of signed delta events (`deltaMrrCents`).
+- Deterministic Math & Zero Drift: Financial metrics are calculated in integer cents to eliminate IEEE 754 floating-point rounding drift.
+- Concurrency & Multi-Tab Synchronization: State transitions execute within atomic transactions managed by the Web Locks API (`navigator.locks`) with in-memory Promise queue fallbacks and monotonic revision checking.
+- Real-Time SaaS Performance Metrics:
+  - Net MRR & ARR (Annual Run Rate)
+  - Cohort-isolated Net Revenue Retention (NRR)
+  - Normalized Logo Churn Rate & Customer Lifetime Value (LTV)
+  - Average Revenue Per User (ARPU) & Trial Conversion Rate
+  - M0–M5 Cohort Retention Heatmap (Logo Retention % and Net Dollar Retention %)
+- Accessible, Hover-Free Visualizations: In-house Recharts wrappers providing tapped coordinate inspection (`InteractiveChartInspector`) that does not depend on desktop mouse hover states.
+- RFC 4180 Compliant CSV Export: Client-side CSV generator with UTF-8 BOM and defensive formula injection mitigation (CWE-1236) protecting against spreadsheet DDE/macro exploits.
+- Flash-Free Dark Mode: Synchronous layout bootstrap script evaluating localStorage and system preferences prior to first paint.
+- Mobile-First Interface: Certified responsive layout down to 360px viewport width, enforcing 44x44px minimum touch targets and mobile card-row fallbacks.
+
+---
+
+## Financial Logic & SaaS Metric Engine
+
+All domain calculations are pure functions isolated in `src/lib/calculations.ts`, taking an explicit `now` parameter to ensure consistency across server renders, client hydration, and automated unit tests.
+
+### Mathematical Definitions
+
+1. Net MRR:
+   Net MRR = Sum of customer.mrrCents for all customers with status 'active' or 'past_due'. Customers with status 'trialing' or 'canceled' contribute 0 cents.
+
+2. Annual Run Rate (ARR):
+   ARR = Net MRR * 12
+
+3. Net Revenue Retention (NRR %):
+   Evaluated strictly over the cohort of customers active at the start of the window:
+   NRR = ((Start MRR + Expansion MRR + Contraction MRR + Churned MRR) / Start MRR) * 100
+   *Note: Contraction and Churn carry negative deltas. New business and reactivations inside the window are excluded to prevent cohort inflation.*
+
+4. Logo Churn Rate (%):
+   Logo Churn Rate = (Count of 'churn' events in window / max(1, Active Subscribers at Start + New Customers in Window)) * 100
+   *Note: 'trial_canceled' events are excluded from logo churn.*
+
+5. Normalized Lifetime Value (LTV):
+   Normalizes the window-level churn rate to an equivalent 30-day monthly churn fraction:
+   c = Logo Churn Rate / 100
+   Monthly Churn = max(0.008, 1 - (1 - min(0.99, c)) ^ (30 / windowDays))
+   Estimated LTV = Math.round(ARPU / Monthly Churn)
+
+6. Cohort Retention & Net Dollar Retention (NDR %):
+   - M0 Logo Retention is fixed at 100%.
+   - Month k Logo Retention evaluates active accounts against unelapsed UTC calendar months.
+   - NDR % evaluates current cohort MRR against the initial Month 0 opening new-business value.
+
+---
+
+## Architecture & Security Model
+
+### Strict Dependency Chain
+Dependencies flow in one direction to eliminate circular references and side-effects:
+```
+src/types/analytics.ts
+  -> src/lib/utils.ts, src/lib/validators.ts, src/lib/chartUtils.ts
+  -> src/lib/seed.ts
+  -> src/lib/mutations.ts
+  -> src/lib/storage.ts
+  -> src/lib/calculations.ts, src/lib/csv.ts
+  -> src/hooks/*
+  -> src/components/*
+```
+
+### Storage Topology & State Isolation
+- `microsaas_v1_state`: Core immutable snapshot containing `schemaVersion`, `revision`, `asOf`, customer records, and ledger events.
+- `microsaas_v1_ui_prefs`: Device-isolated filter preferences (`dateRange`, `tier`, `channel`, `searchQuery`, `sortField`). Modifying UI filters does not bump business state revisions or trigger cross-tab conflicts.
+- `microsaas_v1_theme`: Theme choice (`light` | `dark`), read by an inline script in `<head>` before stylesheet execution to eliminate theme flash.
+
+### Security Controls
+- CSV Formula Injection Mitigation (CWE-1236): Text cells are trimmed and inspected for formula triggers (`=`, `+`, `-`, `@`, `\t`, `\r`). Vulnerable values are prefixed with a single quote (`'`), while numeric columns are preserved as raw numbers.
+- Security Headers: Configured in `next.config.ts` (`Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`).
+- Optimistic Concurrency: All customer mutations accept an `expectedVersion`. Concurrent writes from other tabs are rejected with concurrency conflict signals.
+
+---
+
+## Tech Stack
+
+- Framework: Next.js (App Router)
+- Language: TypeScript (Strict mode, `noUncheckedIndexedAccess: true`)
+- Styling: Tailwind CSS v4 (`@tailwindcss/postcss`)
+- Charts: In-house Recharts wrappers (`recharts`)
+- Icons: Lucide React (`lucide-react`)
+- Package Manager: pnpm
+- Unit Testing: Vitest (`vitest`)
+- End-to-End Testing: Playwright (`@playwright/test`)
+
+---
+
+## Project Structure
+
+```text
+├── e2e/                           # Playwright end-to-end responsive test suite
+│   └── responsive.spec.ts
+├── src/
+│   ├── app/                       # Next.js App Router entry points & global styles
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── components/
+│   │   ├── features/              # Complex domain feature assemblies
+│   │   │   ├── CohortRetentionMatrix.tsx
+│   │   │   ├── CustomerLedgerTable.tsx
+│   │   │   ├── DashboardClient.tsx
+│   │   │   ├── MrrCompositionChart.tsx
+│   │   │   ├── RevenueMovementFeed.tsx
+│   │   │   └── TierDistributionCard.tsx
+│   │   ├── molecules/             # Composite UI components
+│   │   │   ├── AppHeader.tsx
+│   │   │   ├── FilterControlBar.tsx
+│   │   │   ├── InteractiveChartInspector.tsx
+│   │   │   ├── KpiBentoCard.tsx
+│   │   │   └── NewSubscriptionModal.tsx
+│   │   ├── primitives/            # Reusable atomic UI elements
+│   │   │   ├── ConfirmDialog.tsx
+│   │   │   ├── EmptyStateCard.tsx
+│   │   │   ├── MetricBadge.tsx
+│   │   │   ├── SegmentedControl.tsx
+│   │   │   ├── SlideOverDrawer.tsx
+│   │   │   └── ThemeToggle.tsx
+│   │   └── ui/                    # In-house chart visualization components
+│   │       ├── AreaChart.tsx
+│   │       ├── BarChart.tsx
+│   │       ├── BarList.tsx
+│   │       ├── DonutChart.tsx
+│   │       ├── Legend.tsx
+│   │       └── SparkAreaChart.tsx
+│   ├── hooks/                     # Custom reactive hooks & store bridges
+│   │   ├── useAnalyticsStore.ts
+│   │   ├── useCsvExport.ts
+│   │   ├── useHydrated.ts
+│   │   ├── usePrefersReducedMotion.ts
+│   │   └── useUiPrefs.ts
+│   ├── lib/                       # Pure utilities, reducers, seed & domain math
+│   │   ├── __tests__/             # Unit test specifications
+│   │   │   ├── calculations.test.ts
+│   │   │   ├── csv.test.ts
+│   │   │   └── ledger.test.ts
+│   │   ├── calculations.ts
+│   │   ├── chartUtils.ts
+│   │   ├── csv.ts
+│   │   ├── mutations.ts
+│   │   ├── seed.ts
+│   │   ├── storage.ts
+│   │   ├── utils.ts
+│   │   └── validators.ts
+│   └── types/
+│       └── analytics.ts           # Pure TypeScript contracts and interfaces
+├── eslint.config.mjs
+├── next.config.ts
+├── package.json
+├── playwright.config.ts
+├── pnpm-workspace.yaml
+├── postcss.config.mjs
+├── tsconfig.json
+└── vitest.config.ts
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js `>=20.9.0`
+- pnpm `>=10.0.0`
+
+### Installation
+
+1. Clone repository:
+   ```bash
+   git clone https://github.com/mmy-lana/nextjs-tremor-microsaas-analytics.git
+   cd nextjs-tremor-microsaas-analytics
+   ```
+
+2. Install dependencies:
+   ```bash
+   pnpm install --frozen-lockfile
+   ```
+
+3. Install Playwright browser binaries (for e2e tests):
+   ```bash
+   pnpm exec playwright install chromium
+   ```
+
+### Development
+
+Run the local development server:
 ```bash
-pnpm install --frozen-lockfile
-pnpm exec playwright install chromium
+pnpm dev
+```
+Open http://localhost:3000 in your browser.
+
+---
+
+## Verification & Quality Gates
+
+The codebase enforces strict quality gates across compilation, linting, unit testing, and headless browser automation.
+
+| Stage | Command | Target / Standard |
+|---|---|---|
+| Type Checking | `pnpm typecheck` | TypeScript 5.x strict mode with `noUncheckedIndexedAccess` |
+| Linting | `pnpm lint` | ESLint flat config with Next.js core web vitals and TypeScript rules |
+| Unit Tests | `pnpm test` | Vitest test runner covering ledger invariant, financial math, mutations, and CSV escaping |
+| Production Build | `pnpm build` | Static and dynamic route compilation with zero hydration warnings |
+| End-to-End Tests | `pnpm e2e` | Playwright headless Chromium testing across 360px, 390px, 430px, 768px, 1024px, and 1280px |
+
+Execute the full quality audit chain:
+```bash
+pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm e2e
 ```
 
-## Scripts
-- `pnpm dev`: Start Next.js development server
-- `pnpm build`: Create production build
-- `pnpm start`: Start production server
-- `pnpm lint`: Run ESLint checks
-- `pnpm typecheck`: Run TypeScript compiler checks
-- `pnpm test`: Run Vitest unit tests
-- `pnpm e2e`: Run Playwright end-to-end tests (Chromium only, runs against `pnpm start`)
+---
 
-## Architecture
-- Single snapshot state management with `navigator.locks` concurrency safety.
-- Zero external copy-paste visualization dependencies; in-house Recharts wrappers.
-- Event-sourced ledger invariant validation.
-- Responsive design tailored for mobile-first viewports (360px+) to desktop.
+## License
 
-### Import chain
-Dependencies only ever flow one way, so no module can reach for state that does
-not exist yet:
-
-```
-types → utils / validators / chartUtils → seed → mutations → storage
-      → calculations / csv → hooks → components
-```
-
-`storage.ts` is the only module allowed to touch `window` or `localStorage`.
-`calculations.ts` and `csv.ts` take `now` as a parameter and never read the
-clock, so a metric is reproducible in a test and identical on both sides of a
-hydration boundary.
-
-### Data model
-Customer MRR is never trusted as stored: it is reconstructed from the sum of
-that customer's event deltas. `assertLedgerInvariant` checks the two agree, and
-it runs in the seed generator, at the end of every reducer, and on every read
-back out of `localStorage`.
-
-Mutations carry `expectedVersion`. Two tabs editing the same row cannot silently
-overwrite each other, because the second write is rejected and the tab reloads
-the newer snapshot before asking the user to retry.
-
-### Verification
-| Gate | Command | Result |
-| --- | --- | --- |
-| Types | `pnpm typecheck` | clean, `strict` + `noUncheckedIndexedAccess` |
-| Lint | `pnpm lint` | zero errors, zero warnings |
-| Units | `pnpm test` | 118 tests |
-| Build | `pnpm build` | 2 static routes |
-| Browser | `pnpm e2e` | 30 tests, headless Chromium |
-
-The browser suite asserts the layout contract rather than taking screenshots:
-no horizontal overflow, no hydration warnings, a 44×44 minimum on every visible
-button and tab, and a chart tap reaching the inspector — each across 360, 390,
-430, 768, 1024 and 1280px. It also exercises the flows a user actually performs:
-filtering, sorting, paging, adding a customer, rejecting a duplicate email,
-cancelling behind a confirmation, resetting the dataset, exporting both CSVs and
-a theme choice surviving a reload.
-
-## Resolved dependency versions
-
-Every dependency is pinned to an exact version. The stack is resolved from the
-highest version published across **all** dist-tags (`latest`, `canary`, `next`,
-`beta`, `alpha`, `rc`), never `latest` alone.
-
-| Package | Version | Dist-tag resolved from |
-| --- | --- | --- |
-| `next` | 16.3.7 | `latest` |
-| `react` / `react-dom` | 19.3.0 | `latest` |
-| `react-is` | 19.3.0 | `latest` |
-| `typescript` | 6.0.3 | `latest` — **downgraded, see below** |
-| `tailwindcss` / `@tailwindcss/postcss` | 4.3.3 | `latest` |
-| `tailwind-merge` | 3.7.0 | `latest` |
-| `recharts` | 3.10.1 | `latest` |
-| `lucide-react` | 1.49.0 | `latest` |
-| `clsx` | 2.1.1 | `latest` |
-| `postcss` | 8.5.28 | `latest` |
-| `eslint` | 9.39.5 | `maintenance` — **downgraded, see below** |
-| `eslint-config-next` | 16.3.7 | `latest` (matches Next) |
-| `@types/react` / `@types/react-dom` | 19.3.0 | `latest` (matches React) |
-| `@types/node` | 26.6.3 | `latest` |
-| `vitest` | 5.0.2 | `latest` |
-| `@playwright/test` | 1.63.0 | `latest` |
-
-### Recorded downgrades
-
-Two packages sit one step below the highest published version because the
-bleeding-edge releases are not yet compatible with the rest of the toolchain.
-Each is a single-package step down, recorded here as required by the version
-policy.
-
-1. **`typescript` 7.0.2 → 6.0.3.** Every TypeScript 7 release — including all
-   `7.1.0-dev.*` nightlies — is rejected at load time by `typescript-eslint`,
-   which hard-guards on `ts.versionMajor >= 7` (see
-   typescript-eslint issue #10940). The guard is present verbatim in the newest
-   published `typescript-eslint` (`8.71.1-alpha.2`) as well, so no version of
-   that package can support TypeScript 7 today. `typescript` is the package
-   that steps down, leaving every other package on its newest release.
-
-2. **`eslint` 10.11.0 → 9.39.5.** `eslint-plugin-react@7.37.5` — the newest
-   published release, and the one `eslint-config-next` depends on — still calls
-   the `context.getFilename()` API that ESLint 10 removed, which crashes the
-   lint run. The `next` dist-tag for `eslint-plugin-react` points at the older
-   `7.8.0-rc.0` line, so there is no newer plugin to pair with ESLint 10.
-   `eslint` is the package that steps down.
-
-### Peer-dependency rules
-
-`strictPeerDependencies` is disabled in `pnpm-workspace.yaml`. The
-`react-is` override forces a single `react-is@19.3.0` across the tree, verified
-with `pnpm why react-is`; the only other consumer is `prop-types` under
-`eslint-plugin-react`, which is a lint-only dependency and never reaches the
-browser bundle.
-
-`unrs-resolver` is the only package approved to run install scripts
-(`allowBuilds` in `pnpm-workspace.yaml`).
+MIT License. Open-source for personal and commercial usage.
